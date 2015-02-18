@@ -38,7 +38,9 @@ using namespace std;
 #include <ratslam_ros/TopologicalAction.h>
 #include <nav_msgs/Odometry.h>
 #include <ratslam_ros/ViewTemplate.h>
-
+#include <sensor_msgs/Image.h>
+#include <visualization_msgs/Marker.h>
+#include <cv_bridge/cv_bridge.h>
 
 #if HAVE_IRRLICHT
 #include "graphics/posecell_scene.h"
@@ -49,6 +51,9 @@ bool use_graphics;
 using namespace ratslam;
 
 ratslam_ros::TopologicalAction pc_output;
+
+ros::Publisher * g_pub_img=NULL, *g_pub_mar=NULL;
+cv::Mat g_pc_image;
 
 void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, ros::Publisher * pub_pc)
 {
@@ -71,6 +76,60 @@ void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, 
 	  pc_output.relative_rad = pc->get_relative_rad();
       pub_pc->publish(pc_output);
       ROS_DEBUG_STREAM("PC:action_publish{odo}{" << ros::Time::now() << "} action{" << pc_output.header.seq << "}=" <<  pc_output.action << " src=" << pc_output.src_id << " dest=" << pc_output.dest_id);
+      
+      if(g_pub_img) {
+		  if(g_pc_image.cols!=pc->dim_xy()) {
+			  g_pc_image = cv::Mat(pc->dim_xy(), pc->dim_xy(), CV_32SC1, cv::Scalar(0));
+		  }
+		  
+		  static visualization_msgs::Marker mar;
+		  
+		  mar.type = visualization_msgs::Marker::LINE_LIST;
+		  mar.action = visualization_msgs::Marker::ADD;
+		  mar.header = pc_output.header;
+		  mar.header.frame_id = "/map";
+		  mar.scale.x = 0.05;
+		  mar.color.a = 1.0;
+		  mar.color.r = 1.0;
+		  mar.color.g = 1.0;
+		  mar.color.b = 1.0;
+		  
+		  //if(g_pc_image.at<int>((int)pc->x(), (int)pc->y())<10)
+		  if(mar.points.size()<1 || (int)mar.points[mar.points.size()-1].x!=(int)pc->x() || (int)mar.points[mar.points.size()-1].y!=(int)pc->y()) {
+			  if(g_pc_image.at<int>((int)pc->x(), (int)pc->y())==0) g_pc_image.at<int>((int)pc->x(), (int)pc->y())=4;
+			  g_pc_image.at<int>((int)pc->x(), (int)pc->y()) += 1;
+		
+			  geometry_msgs::Point pt;
+			  pt.x = pc->x()-pc->dim_xy()/2;
+			  pt.y = pc->y()-pc->dim_xy()/2;
+			  pt.z = pc->th()/10.;
+			  
+			  if(mar.points.size()<1) {
+				  mar.points.push_back(pt);
+				  mar.points.push_back(pt);
+			  }
+			  else if( std::pow(mar.points[mar.points.size()-1].x-pt.x,2)+std::pow(mar.points[mar.points.size()-1].y-pt.y,2) > 49) {
+				  mar.points.push_back(pt);
+				  mar.points.push_back(pt);
+			  }
+			  else {
+				  mar.points.push_back(mar.points[mar.points.size()-1]);
+				  mar.points.push_back(pt);
+			  }
+			  
+		  }
+		  
+		  double min;
+		  double max;
+		  cv::minMaxIdx(g_pc_image, &min, &max);
+		  cv::Mat adjMap;
+		  cv::convertScaleAbs(g_pc_image, adjMap, 255 / max);
+
+		  sensor_msgs::ImagePtr msg = cv_bridge::CvImage(pc_output.header, "mono8", adjMap).toImageMsg();
+		  g_pub_img->publish(msg);
+		  
+		  g_pub_mar->publish(mar);
+	  }
     }
 
 
@@ -130,6 +189,11 @@ int main(int argc, char * argv[])
 
   ratslam::PosecellNetwork * pc = new ratslam::PosecellNetwork(ratslam_settings);
   ros::Publisher pub_pc = node.advertise<ratslam_ros::TopologicalAction>(topic_root + "/PoseCell/TopologicalAction", 0);
+  ros::Publisher pub_img = node.advertise<sensor_msgs::Image>(topic_root + "/PoseCell/MapImage", 0);
+  ros::Publisher pub_mar = node.advertise<visualization_msgs::Marker>(topic_root + "/PoseCell/MapMarker", 0);
+  
+  g_pub_img = &pub_img;
+  g_pub_mar = &pub_mar;
 
   ros::Subscriber sub_odometry = node.subscribe<nav_msgs::Odometry>(topic_root + "/odom", 0, boost::bind(odo_callback, _1, pc, &pub_pc), ros::VoidConstPtr(),
                                                                     ros::TransportHints().tcpNoDelay());

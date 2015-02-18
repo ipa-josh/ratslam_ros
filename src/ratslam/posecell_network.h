@@ -109,6 +109,8 @@ public:
   {
     return best_th;
   }
+  
+  int dim_xy() const {return PC_DIM_XY;}
 
   // get and set all the cells as one array
   double * get_cells();
