@@ -27,7 +27,7 @@ def evaluate(fn):
 	print max(onlyfiles)
 	shutil.move("/tmp/video/%05i.jpg"%max(onlyfiles), "/tmp/eval_"+fn+".jpg")
 	
-	system("ffmpeg -r 30 -b 2000 -i /tmp/video/%05d.jpg /tmp/eval_"+fn+".avi")
+	system("ffmpeg -r 30 -qscale 1 -i /tmp/video/%05d.jpg /tmp/eval_"+fn+".avi")
 
 for fn in sys.argv[1:]:
 	print fn
