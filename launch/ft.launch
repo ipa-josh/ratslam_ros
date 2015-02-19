@@ -1,0 +1,10 @@
+
+<launch>
+
+	<machine name="local_alt" address="localhost" default="true" />
+	
+	<node name="RatSLAMPoseCells" pkg="ratslam_ros" type="ratslam_pc" args="$(find ratslam_ros)/config/config_irataus.txt.in _image_transport:=compressed" cwd="node" required="true">
+		<remap from="/irat_red/odom" to="/odom"/>
+	</node>
+	
+</launch>
