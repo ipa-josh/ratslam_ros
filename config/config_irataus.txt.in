@@ -10,7 +10,7 @@ vt_step_match = 1
 vt_match_threshold = 0.03
 vt_active_decay = 1.0
 
-pc_dim_xy = 11
+pc_dim_xy = 100
 pc_vt_inject_energy = 0.1
 pc_cell_x_size = 0.015
 

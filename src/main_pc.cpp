@@ -96,8 +96,9 @@ void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, 
 		  
 		  //if(g_pc_image.at<int>((int)pc->x(), (int)pc->y())<10)
 		  if(mar.points.size()<1 || (int)mar.points[mar.points.size()-1].x!=(int)pc->x() || (int)mar.points[mar.points.size()-1].y!=(int)pc->y()) {
-			  if(g_pc_image.at<int>((int)pc->x(), (int)pc->y())==0) g_pc_image.at<int>((int)pc->x(), (int)pc->y())=4;
+			  if(g_pc_image.at<int>((int)pc->x(), (int)pc->y())==0) g_pc_image.at<int>((int)pc->x(), (int)pc->y())=10;
 			  g_pc_image.at<int>((int)pc->x(), (int)pc->y()) += 1;
+			  if(g_pc_image.at<int>((int)pc->x(), (int)pc->y())>15) g_pc_image.at<int>((int)pc->x(), (int)pc->y())=15;
 		
 			  geometry_msgs::Point pt;
 			  pt.x = pc->x()-pc->dim_xy()/2;

@@ -22,3 +22,4 @@ for fn in sys.argv[1:]:
 			lo.close()
 			
 			system("script/eval.py ft_eval.launch _"+str(pc_vt_inject_energy)+"_"+str(pc_cell_x_size)+" "+fn)
+

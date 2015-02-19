@@ -2,17 +2,18 @@
 
 import sys, subprocess, time
 from os import listdir, mkdir, system
-from os.path import isfile, join, isdir
+from os.path import isfile, join, isdir, basename
 import shutil
 
-def evaluate(fn):
+def evaluate(fn, launch="ft.launch", prefix=""):
 	#start ratslam
 	if isdir('/tmp/video'): shutil.rmtree('/tmp/video')
 	mkdir('/tmp/video')
-	p_ratslam = subprocess.Popen(["roslaunch","ratslam_ros","ft.launch"], stderr=subprocess.PIPE)
+	base = basename(fn)
+	p_ratslam = subprocess.Popen(["roslaunch","ratslam_ros",launch])
 	p_img =    subprocess.Popen(["rosrun","image_view","extract_images","_sec_per_frame:=0","image:=/irat_red/PoseCell/MapImage",'_filename_format:=/tmp/video/%05i.jpg'])
-	p_record = subprocess.Popen(["rosbag","record","-O","/tmp/eval_"+fn,"--lz4","/irat_red/PoseCell/MapMarker"], stderr=subprocess.PIPE)
-	p_launch = subprocess.Popen(["rosbag","play","-r","3",fn], stderr=subprocess.PIPE)
+	p_record = subprocess.Popen(["rosbag","record","-O","/tmp/eval_"+base+prefix,"--lz4","/irat_red/PoseCell/MapMarker"])
+	p_launch = subprocess.Popen(["rosbag","play","-r","3",fn])
 	
 	while p_launch.poll() is None:
 		time.sleep(0.1)
@@ -25,10 +26,10 @@ def evaluate(fn):
 	if len(onlyfiles)<1: return
 	#print onlyfiles
 	print max(onlyfiles)
-	shutil.move("/tmp/video/%05i.jpg"%max(onlyfiles), "/tmp/eval_"+fn+".jpg")
+	shutil.move("/tmp/video/%05i.jpg"%max(onlyfiles), "/tmp/eval_"+base+prefix+".jpg")
 	
-	system("ffmpeg -r 30 -qscale 1 -i /tmp/video/%05d.jpg /tmp/eval_"+fn+".avi")
+	system("ffmpeg -r 30 -qscale 1 -i /tmp/video/%05d.jpg /tmp/eval_"+base+prefix+".avi")
 
-for fn in sys.argv[1:]:
+for fn in sys.argv[3:]:
 	print fn
-	evaluate(fn)
+	evaluate(fn, sys.argv[1], sys.argv[2])
