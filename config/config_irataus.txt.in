@@ -8,13 +8,20 @@ template_y_size=20
 vt_shift_match = 4
 vt_step_match = 1
 vt_match_threshold = 0.03
-vt_active_decay = 1.0
+vt_active_decay = 0.50
 
 pc_dim_xy = 100
-pc_vt_inject_energy = 0.1
-pc_cell_x_size = 0.015
 
-exp_delta_pc_threshold = 2
+;pc_vt_inject_energy = 0.05
+;pc_cell_x_size = 0.1
+
+;pc_cell_x_size = 0.15
+pc_vt_inject_energy = 0.04
+pc_cell_x_size = 0.15
+pc_vt_restore = 0.1
+
+exp_correction=0.5
+exp_delta_pc_threshold = 1
 exp_loops=20
 exp_initial_em_deg=140
 
