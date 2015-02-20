@@ -34,13 +34,19 @@ using namespace std;
 
 #include <ros/ros.h>
 
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
+#include <boost/foreach.hpp>
+
 #include "ratslam/posecell_network.h"
 #include <ratslam_ros/TopologicalAction.h>
 #include <nav_msgs/Odometry.h>
 #include <ratslam_ros/ViewTemplate.h>
 #include <sensor_msgs/Image.h>
+#include <std_msgs/Int32.h>
 #include <visualization_msgs/Marker.h>
 #include <cv_bridge/cv_bridge.h>
+#include <opencv2/opencv.hpp>
 
 #if HAVE_IRRLICHT
 #include "graphics/posecell_scene.h"
@@ -53,6 +59,7 @@ using namespace ratslam;
 ratslam_ros::TopologicalAction pc_output;
 
 ros::Publisher * g_pub_img=NULL, *g_pub_mar=NULL;
+rosbag::Bag *g_bag_out = NULL;
 cv::Mat g_pc_image;
 
 void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, ros::Publisher * pub_pc)
@@ -74,7 +81,7 @@ void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, 
       pc_output.header.seq++;
       pc_output.dest_id = pc->get_current_exp_id();
 	  pc_output.relative_rad = pc->get_relative_rad();
-      pub_pc->publish(pc_output);
+      if(!g_bag_out) pub_pc->publish(pc_output);
       ROS_DEBUG_STREAM("PC:action_publish{odo}{" << ros::Time::now() << "} action{" << pc_output.header.seq << "}=" <<  pc_output.action << " src=" << pc_output.src_id << " dest=" << pc_output.dest_id);
       
       if(g_pub_img) {
@@ -126,10 +133,20 @@ void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, 
 		  cv::Mat adjMap;
 		  cv::convertScaleAbs(g_pc_image, adjMap, 255 / max);
 
-		  sensor_msgs::ImagePtr msg = cv_bridge::CvImage(pc_output.header, "mono8", adjMap).toImageMsg();
-		  g_pub_img->publish(msg);
-		  
-		  g_pub_mar->publish(mar);
+		  if(g_bag_out) {
+			  g_bag_out->write("/PoseCell/MapMarker",ros::Time::now(),mar);
+			  char fn[512];
+			  static int cnt=0;
+			  sprintf(fn, "/tmp/video/%05i.jpg", cnt);
+			  cnt++;
+			  cv::imwrite( "../../images/Gray_Image.jpg", adjMap);
+		  }
+		  else {
+			  sensor_msgs::ImagePtr msg = cv_bridge::CvImage(pc_output.header, "mono8", adjMap).toImageMsg();
+			  g_pub_img->publish(msg);
+			  
+			  g_pub_mar->publish(mar);
+		  }
 	  }
     }
 
@@ -149,7 +166,7 @@ void template_callback(ratslam_ros::ViewTemplateConstPtr vt, ratslam::PosecellNe
 {
   ROS_DEBUG_STREAM("PC:vt_callback{" << ros::Time::now() << "} seq=" << vt->header.seq << " id=" << vt->current_id << " rad=" << vt->relative_rad);
 
-  pc->on_view_template(vt->current_id, vt->relative_rad);
+  pc->on_view_template(vt->current_id, vt->relative_rad, vt->energy);
 
 #ifdef HAVE_IRRLICHT__
 	if (use_graphics)
@@ -169,7 +186,7 @@ int main(int argc, char * argv[])
 
   if (argc < 2)
   {
-    ROS_FATAL_STREAM("USAGE: " << argv[0] << " <config_file>");
+    ROS_FATAL_STREAM("USAGE: " << argv[0] << " <config_file> [<input bag file> <output bag file>]");
     exit(-1);
   }
   std::string topic_root = "";
@@ -185,7 +202,6 @@ int main(int argc, char * argv[])
     ros::init(argc, argv, "RatSLAMPoseCells");
   }
   ros::NodeHandle node;
-
 
 
   ratslam::PosecellNetwork * pc = new ratslam::PosecellNetwork(ratslam_settings);
@@ -210,7 +226,46 @@ int main(int argc, char * argv[])
   }
 #endif
 
-  ros::spin();
+
+
+  if(argc >= 4 ) {
+	  rosbag::Bag bag_in;
+	  g_bag_out = new rosbag::Bag;
+	  bag_in.open(argv[2], rosbag::bagmode::Read);
+	  g_bag_out->open(argv[3], rosbag::bagmode::Write);
+	  g_bag_out->setCompression(rosbag::compression::BZ2);
+	  
+		std::vector<std::string> topics;
+		topics.push_back(topic_root + "/odom");
+		topics.push_back(topic_root + "/LocalView/Template");
+		topics.push_back("/feature2view_eval/view_id");
+		rosbag::View view(bag_in, rosbag::TopicQuery(topics));
+
+		BOOST_FOREACH(rosbag::MessageInstance const m, view)
+		{			
+			nav_msgs::OdometryConstPtr odo = m.instantiate<nav_msgs::Odometry>();
+			if (odo != NULL) {
+				odo_callback(odo, pc, &pub_pc);
+			}
+			ratslam_ros::ViewTemplateConstPtr view = m.instantiate<ratslam_ros::ViewTemplate>();
+			if (view != NULL) {
+				template_callback(view, pc, &pub_pc);
+			}
+			std_msgs::Int32ConstPtr view_id = m.instantiate<std_msgs::Int32>();
+			if (view_id != NULL) {
+				ratslam_ros::ViewTemplate vt;
+				vt.current_id = view_id->data;
+				vt.energy = 0;
+				template_callback(boost::make_shared<ratslam_ros::ViewTemplate>(vt), pc, &pub_pc);
+			}
+		}
+	
+	  bag_in.close();
+	  g_bag_out->close();
+	  delete g_bag_out;
+  }
+  else
+	ros::spin();
 
   return 0;
 }
