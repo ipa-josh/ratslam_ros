@@ -92,7 +92,7 @@ public:
 
   void on_odo(double vtrans, double vrot, double time_diff_s);
 
-  void on_view_template(unsigned int vt, double vt_rad);
+  void on_view_template(unsigned int vt, double vt_rad, double input_energy);
 
   PosecellAction get_action();
 

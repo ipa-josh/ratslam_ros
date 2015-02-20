@@ -1020,8 +1020,9 @@ void PosecellNetwork::create_view_template()
 
 }
 
-void PosecellNetwork::on_view_template(unsigned int vt, double vt_rad)
+void PosecellNetwork::on_view_template(unsigned int vt, double vt_rad, double input_energy)
 {
+	if(input_energy<=0) input_energy = PC_VT_INJECT_ENERGY;
   PosecellVisualTemplate * pcvt;
   if (vt >= visual_templates.size())
   {
@@ -1044,7 +1045,7 @@ void PosecellNetwork::on_view_template(unsigned int vt, double vt_rad)
       }
 
       // this line is magic. ask michael about it
-      double energy = PC_VT_INJECT_ENERGY * 1.0 / 30.0 * (30.0 - exp(1.2 * pcvt->decay));
+      double energy = input_energy * 1.0 / 30.0 * (30.0 - exp(1.2 * pcvt->decay));
       if (energy > 0)
       {
 		vt_delta_pc_th = vt_rad / (2.0*M_PI) * PC_DIM_TH;
