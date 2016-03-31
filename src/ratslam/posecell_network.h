@@ -77,6 +77,13 @@ struct PosecellExperience {
   int vt_id;
 };
 
+struct PoseCellPtr {
+	int th,y,x;
+	
+	PoseCellPtr(const int th, const int y, const int x) :
+	 th(th), y(y), x(x)
+	{}
+};
 
 class PosecellNetwork
 {
@@ -214,7 +221,7 @@ private:
   PosecellNetwork(const PosecellNetwork & other);
   const PosecellNetwork & operator=(const PosecellNetwork & other);
   void pose_cell_builder();
-  bool pose_cell_excite_helper(int x, int y, int z);
+  bool pose_cell_excite_helper(int x, int y, int z, std::vector<PoseCellPtr> &used);
   bool pose_cell_inhibit_helper(int x, int y, int z);
   void circshift2d(double * array, double * array_buffer, int dimx, int dimy, int shiftx, int shifty);
   int rot90_square(double ** array, int dim, int rot);
@@ -246,6 +253,7 @@ private:
   bool odo_update;
   bool vt_update;
 
+  std::vector<PoseCellPtr> used_posecells;
   Posecell *** posecells;
   Posecell * posecells_memory;
   int posecells_memory_size;

@@ -125,6 +125,8 @@ void PosecellNetwork::pose_cell_builder()
   PC_W_INHIB = (double *)malloc(sizeof(double) * PC_W_I_DIM * PC_W_I_DIM * PC_W_I_DIM);
 
   posecells[(int)best_th][(int)best_y][(int)best_x] = 1;
+  used_posecells.clear();
+  used_posecells.push_back(PoseCellPtr(best_th, best_y, best_x));
 
   // set up the wrap lookups
   PC_W_E_DIM_HALF = (int)floor((double)PC_W_E_DIM / 2.0);
@@ -235,13 +237,18 @@ PosecellNetwork::~PosecellNetwork()
   free(PC_TH_SUM_COS_LOOKUP);
   free(posecells_memory);
   free(pca_new_memory);
+  used_posecells.clear();
 }
 
 bool PosecellNetwork::inject(int act_x, int act_y, int act_z, double energy)
 {
 
-  if (act_x < PC_DIM_XY && act_x >= 0 && act_y < PC_DIM_XY && act_y >= 0 && act_z < PC_DIM_TH && act_z >= 0)
+  if (act_x < PC_DIM_XY && act_x >= 0 && act_y < PC_DIM_XY && act_y >= 0 && act_z < PC_DIM_TH && act_z >= 0) {
+    const bool no = posecells[act_z][act_y][act_x]>0;
     posecells[act_z][act_y][act_x] += energy;
+    if(!no && posecells[act_z][act_y][act_x]>0)
+		used_posecells.push_back(PoseCellPtr(act_z, act_y, act_x));
+  }
 
   return true;
 }
@@ -253,24 +260,16 @@ bool PosecellNetwork::excite(void)
   // set all of pca_new to 0
   memset(pca_new_memory, 0, posecells_memory_size);
 
+  std::vector<PoseCellPtr> used;
   // loop in all three dimensions
-  for (i = 0; i < PC_DIM_XY; i++)
-  {
-    for (j = 0; j < PC_DIM_XY; j++)
-    {
-      for (k = 0; k < PC_DIM_TH; k++)
-      {
-        if (posecells[k][j][i] != 0)
-        {
-          // spread the pose cell energy
-          pose_cell_excite_helper(i, j, k);
-        }
-      }
-    }
-  }
+  for(size_t n=0; n<used_posecells.size(); n++)
+	  // spread the pose cell energy
+	  pose_cell_excite_helper(used_posecells[n].th, used_posecells[n].y, used_posecells[n].x, used);
 
   //  pc.Posecells = pca_new;
   memcpy(posecells_memory, pca_new_memory, posecells_memory_size);
+  used_posecells = used;
+  
   return true;
 
 }
@@ -283,25 +282,21 @@ bool PosecellNetwork::inhibit(void)
   memset(pca_new_memory, 0, posecells_memory_size);
 
   // loop through all dimensions
-  for (i = 0; i < PC_DIM_XY; i++)
+  for(size_t n=0; n<used_posecells.size(); n++)
   {
-    for (j = 0; j < PC_DIM_XY; j++)
-    {
-      for (k = 0; k < PC_DIM_TH; k++)
-      {
-        if (posecells[k][j][i] != 0)
-        {
-          // if there is energy in the current posecell,
-          // spread the energy
-          pose_cell_inhibit_helper(i, j, k);
-        }
-      }
-    }
+	  // if there is energy in the current posecell,
+	  // spread the energy
+	  pose_cell_inhibit_helper(used_posecells[n].th, used_posecells[n].y, used_posecells[n].x);
   }
 
-  for (i = 0; i < posecells_elements; i++)
+  for(size_t n=0; n<used_posecells.size(); n++)
   {
-    posecells_memory[i] -= pca_new_memory[i];
+    Posecell &pc = posecells[used_posecells[n].th][used_posecells[n].y][used_posecells[n].x];
+    pc -= pca_new[used_posecells[n].th][used_posecells[n].y][used_posecells[n].x];
+    if(pc<=0) {
+		used_posecells.erase(used_posecells.begin()+n);
+		--n;
+	}
   }
 
   return true;
@@ -309,16 +304,18 @@ bool PosecellNetwork::inhibit(void)
 
 bool PosecellNetwork::global_inhibit()
 {
-  int i;
-  for (i = 0; i < posecells_elements; i++)
+  for(size_t n=0; n<used_posecells.size(); n++)
   {
-    if (posecells_memory[i] >= PC_GLOBAL_INHIB)
+    Posecell &pc = posecells[used_posecells[n].th][used_posecells[n].y][used_posecells[n].x];
+    if (pc > PC_GLOBAL_INHIB)
     {
-      posecells_memory[i] = (posecells_memory[i] - PC_GLOBAL_INHIB);
+      pc = (pc - PC_GLOBAL_INHIB);
     }
     else
     {
-      posecells_memory[i] = 0;
+      pc = 0;
+      used_posecells.erase(used_posecells.begin()+n);
+      --n;
     }
   }
   return true;
@@ -326,18 +323,19 @@ bool PosecellNetwork::global_inhibit()
 
 bool PosecellNetwork::normalise(void)
 {
-  int i;
   double total = 0;
-  for (i = 0; i < posecells_elements; i++)
+  for(size_t n=0; n<used_posecells.size(); n++)
   {
-    total += posecells_memory[i];
+    Posecell &pc = posecells[used_posecells[n].th][used_posecells[n].y][used_posecells[n].x];
+    total += pc;
   }
 
   assert(total > 0);
 
-  for (i = 0; i < posecells_elements; i++)
+  for(size_t n=0; n<used_posecells.size(); n++)
   {
-    posecells_memory[i] /= total;
+    Posecell &pc = posecells[used_posecells[n].th][used_posecells[n].y][used_posecells[n].x];
+    pc /= total;
     //assert(posecells_memory[i] >= 0);
     //assert(!isnan(posecells_memory[i]));
   }
@@ -446,12 +444,15 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
     {
       pca_new_rot_ptr2[0][i] += pca_new_rot_ptr[0][i] * weight_sw;
     }
+    
+    bool hist[PC_DIM_XY][PC_DIM_XY];
 
     // pca90 = pca_new(2:end-1,2:end-1);
     for (j = 0; j < PC_DIM_XY; j++)
     {
       for (i = 0; i < PC_DIM_XY; i++)
       {
+        hist[j][i] = (posecells[dir_pc][j][i]>0);
         posecells[dir_pc][j][i] = pca_new_rot_ptr2[j + 1][i + 1];
       }
     }
@@ -475,6 +476,16 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
     // pc.Posecells(:,:,dir_pc) = rot90(pca90, 4 - floor(dir * 2/pi));
     rot90_square(posecells[dir_pc], PC_DIM_XY, 4 - (int)floor(dir * 2.0 / M_PI));
     //end
+    
+    for (j = 0; j < PC_DIM_XY; j++)
+    {
+      for (i = 0; i < PC_DIM_XY; i++)
+      {
+        if(!hist[j][i] && posecells[dir_pc][j][i]>0)
+			used_posecells.push_back(PoseCellPtr(dir_pc, j, i));
+      }
+    }
+
 
     // end
   }
@@ -534,8 +545,12 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
           assert(newk2 < PC_DIM_TH);
           assert(newk1 >= 0);
           assert(newk2 >= 0);
+          bool no = (posecells[k][j][i]>0);
           posecells[k][j][i] = pca_new[newk1][j][i] * (1.0 - weight) + pca_new[newk2][j][i] * weight;
           // assert(posecells[k][j][i] >= 0);
+          
+          if(!no && posecells[k][j][i]>0)
+			used_posecells.push_back(PoseCellPtr(k, j, i));
         }
       }
 
@@ -556,21 +571,16 @@ double PosecellNetwork::find_best()
 
   // % find the max activated cell
   double max = 0;
-  for (k = 0; k < PC_DIM_TH; k++)
+  for(size_t n=0; n<used_posecells.size(); n++)
   {
-    for (j = 0; j < PC_DIM_XY; j++)
-    {
-      for (i = 0; i < PC_DIM_XY; i++)
-      {
-        if (posecells[k][j][i] > max)
-        {
-          max = posecells[k][j][i];
-          x = (double)i;
-          y = (double)j;
-          th = (double)k;
-        }
-      }
-    }
+    Posecell &pc = posecells[used_posecells[n].th][used_posecells[n].y][used_posecells[n].x];
+	if (pc > max)
+	{
+	  max = pc;
+	  x = (double)used_posecells[n].x;
+	  y = (double)used_posecells[n].y;
+	  th = (double)used_posecells[n].th;
+	}
   }
 
   //  % take the max activated cell +- AVG_CELL in 3d space
@@ -667,6 +677,8 @@ double * PosecellNetwork::get_cells(void)
 
 bool PosecellNetwork::set_cells(double * cells)
 {
+	throw "not supported";
+	
   if (memcpy(posecells_memory, cells, posecells_memory_size) != NULL)
     return true;
   else
@@ -689,7 +701,7 @@ double PosecellNetwork::get_min_delta(double d1, double d2, double max)
   return min(absval, max - absval);
 }
 
-bool PosecellNetwork::pose_cell_excite_helper(int x, int y, int z)
+bool PosecellNetwork::pose_cell_excite_helper(int x, int y, int z, std::vector<PoseCellPtr> &used)
 {
   int xl, yl, zl, xw, yw, zw, excite_index = 0;
 
@@ -707,8 +719,11 @@ bool PosecellNetwork::pose_cell_excite_helper(int x, int y, int z)
 
         // for every pose cell, multiply the current energy by
         // a pdf to spread the energy (PC_W_EXCITE is a 3d pdf)
+        const bool no = (pca_new[zw][yw][xw]>0);
         pca_new[zw][yw][xw] += posecells[z][y][x] * PC_W_EXCITE[excite_index++];
-      }
+        if(!no && pca_new[zw][yw][xw]>0)
+			used.push_back(PoseCellPtr(zw,yw,xw));
+      } 
     }
   }
 
@@ -1069,7 +1084,7 @@ void PosecellNetwork::on_view_template(unsigned int vt, double vt_rad, double in
   prev_vt = current_vt;
   current_vt = vt;
 
-vt_update = true;
+  vt_update = true;
 }
 
 } // namespace ratslam
