@@ -12,3 +12,6 @@ uint32 dest_id
 
 float64 relative_rad
 
+uint32 src_x
+uint32 src_y
+uint32 src_th

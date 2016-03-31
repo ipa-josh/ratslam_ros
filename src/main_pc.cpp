@@ -73,6 +73,9 @@ void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, 
     double time_diff = (odo->header.stamp - prev_time).toSec();
 
     pc_output.src_id = pc->get_current_exp_id();
+    pc_output.src_x = pc->x();
+    pc_output.src_y = pc->y();
+    pc_output.src_th = pc->th();
     pc->on_odo(odo->twist.twist.linear.x, odo->twist.twist.angular.z, time_diff);
     pc_output.action = pc->get_action();
     if (pc_output.action != ratslam::PosecellNetwork::NO_ACTION)
