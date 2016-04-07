@@ -62,7 +62,7 @@ void image_callback(sensor_msgs::ImageConstPtr image, ros::Publisher * pub_vt)
 
   static ratslam_ros::ViewTemplate vt_output;
 
-  lv->on_image(&image->data[0], (image->encoding == "bgr8" ? false : true), image->width, image->height);
+  lv->on_image(&image->data[0], ((image->encoding == "bgr8" || image->encoding == "rgb8") ? false : true), image->width, image->height);
 
   vt_output.header.stamp = ros::Time::now();
   vt_output.header.seq++;

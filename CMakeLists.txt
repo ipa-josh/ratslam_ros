@@ -80,6 +80,7 @@ add_executable(ratslam_pc src/main_pc.cpp)
 target_link_libraries(ratslam_pc
   ${catkin_LIBRARIES} 
   ratslam
+  Irrlicht GL
   ${IRRLICHT_LIBRARIES}
   ${OPENGL_LIBRARIES})
 

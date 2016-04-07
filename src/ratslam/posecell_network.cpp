@@ -264,7 +264,7 @@ bool PosecellNetwork::excite(void)
   // loop in all three dimensions
   for(size_t n=0; n<used_posecells.size(); n++)
 	  // spread the pose cell energy
-	  pose_cell_excite_helper(used_posecells[n].th, used_posecells[n].y, used_posecells[n].x, used);
+	  pose_cell_excite_helper(used_posecells[n].x, used_posecells[n].y, used_posecells[n].th, used);
 
   //  pc.Posecells = pca_new;
   memcpy(posecells_memory, pca_new_memory, posecells_memory_size);
@@ -286,7 +286,7 @@ bool PosecellNetwork::inhibit(void)
   {
 	  // if there is energy in the current posecell,
 	  // spread the energy
-	  pose_cell_inhibit_helper(used_posecells[n].th, used_posecells[n].y, used_posecells[n].x);
+	  pose_cell_inhibit_helper(used_posecells[n].x, used_posecells[n].y, used_posecells[n].th);
   }
 
   for(size_t n=0; n<used_posecells.size(); n++)
@@ -336,7 +336,7 @@ bool PosecellNetwork::normalise(void)
   {
     Posecell &pc = posecells[used_posecells[n].th][used_posecells[n].y][used_posecells[n].x];
     pc /= total;
-    //assert(posecells_memory[i] >= 0);
+    assert(pc > 0);
     //assert(!isnan(posecells_memory[i]));
   }
 
@@ -361,13 +361,22 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
   // for dir_pc=1:PARAMS.PC_DIM_TH
   for (dir_pc = 0; dir_pc < PC_DIM_TH; dir_pc++)
   {
+    int i, j;
+    
+    bool hist[PC_DIM_XY][PC_DIM_XY];
+    for (j = 0; j < PC_DIM_XY; j++)
+    {
+      for (i = 0; i < PC_DIM_XY; i++)
+      {
+        hist[j][i] = (posecells[dir_pc][j][i]>0);
+      }
+    }
 
     // % radians
     // dir = (dir_pc - 1) * pc.PC_C_SIZE_TH;
     double dir = dir_pc * PC_C_SIZE_TH + angle_to_add;
 
     double dir90, weight_sw, weight_se, weight_nw, weight_ne;
-    int i, j;
 
     // % rotate the pc.Posecells instead of implementing for four quadrants
     // pca90 = rot90(pc.Posecells(:,:,dir_pc), floor(dir *2/pi));
@@ -444,15 +453,12 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
     {
       pca_new_rot_ptr2[0][i] += pca_new_rot_ptr[0][i] * weight_sw;
     }
-    
-    bool hist[PC_DIM_XY][PC_DIM_XY];
 
     // pca90 = pca_new(2:end-1,2:end-1);
     for (j = 0; j < PC_DIM_XY; j++)
     {
       for (i = 0; i < PC_DIM_XY; i++)
       {
-        hist[j][i] = (posecells[dir_pc][j][i]>0);
         posecells[dir_pc][j][i] = pca_new_rot_ptr2[j + 1][i + 1];
       }
     }
@@ -483,12 +489,21 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
       {
         if(!hist[j][i] && posecells[dir_pc][j][i]>0)
 			used_posecells.push_back(PoseCellPtr(dir_pc, j, i));
+		  else if(hist[j][i] && posecells[dir_pc][j][i]<=0) {
+			  for(size_t n=0; n<used_posecells.size(); n++)
+				 if(used_posecells[n].x==i&&used_posecells[n].y==j&&used_posecells[n].th==dir_pc) {
+					 used_posecells.erase(used_posecells.begin()+n);
+					 break;
+				 }
+		  }
       }
     }
 
 
     // end
   }
+  
+  check();
 
   // % Path Integration - Theta
   // % Shift the pose cells +/- theta given by vrot
@@ -551,6 +566,14 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
           
           if(!no && posecells[k][j][i]>0)
 			used_posecells.push_back(PoseCellPtr(k, j, i));
+		  else if(no && posecells[k][j][i]<=0) {
+			  for(size_t n=0; n<used_posecells.size(); n++)
+			     if(used_posecells[n].x==i&&used_posecells[n].y==j&&used_posecells[n].th==k) {
+					 used_posecells.erase(used_posecells.begin()+n);
+					 break;
+				 }
+		  }
+		  
         }
       }
 
@@ -1009,18 +1032,46 @@ PosecellNetwork::PosecellAction PosecellNetwork::get_action()
   return action;
 }
 
+void PosecellNetwork::check() {
+#ifdef DEBUG
+	// loop in all three dimensions
+	int i,j,k;
+	for (i = 0; i < PC_DIM_XY; i++)
+	{
+		for (j = 0; j < PC_DIM_XY; j++)
+		{
+			for (k = 0; k < PC_DIM_TH; k++)
+			{
+				bool b1 = (posecells[k][j][i]>0);
+				bool b2 = false;
+			  for(size_t n=0; n<used_posecells.size(); n++)
+			  {
+				  if(used_posecells[n].x==i && used_posecells[n].y==j && used_posecells[n].th==k)
+					b2=true;
+			  }
+			  
+			  if(b1)  assert(b1==b2);
+			  if(!b1) assert(b1==b2);
+		  }
+	  }
+  }
+#endif
+}
+
 void PosecellNetwork::on_odo(double vtrans, double vrot, double time_diff_s)
 {
   vtrans = vtrans * time_diff_s;
   vrot = vrot * time_diff_s;
-
-  excite();
-  inhibit();
-  global_inhibit();
-  normalise();
-  path_integration(vtrans, vrot);
-  find_best();
+check();
+  excite();check();
+  inhibit();check();
+  global_inhibit();check();
+  normalise();check();
+  path_integration(vtrans, vrot);check();
+  find_best();check();
   odo_update = true;
+  
+  check();
 }
 
 void PosecellNetwork::create_view_template()
@@ -1037,7 +1088,8 @@ void PosecellNetwork::create_view_template()
 
 void PosecellNetwork::on_view_template(unsigned int vt, double vt_rad, double input_energy)
 {
-	if(input_energy<=0) input_energy = PC_VT_INJECT_ENERGY;
+  if(input_energy<=0) input_energy = PC_VT_INJECT_ENERGY;
+  
   PosecellVisualTemplate * pcvt;
   if (vt >= visual_templates.size())
   {
