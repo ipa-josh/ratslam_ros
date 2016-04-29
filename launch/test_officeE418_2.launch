@@ -1,0 +1,20 @@
+
+<launch>
+
+	<machine name="local_alt" address="localhost" default="true" />
+	
+	<node name="RatSLAMLocalViewCells" pkg="ratslam_ros" type="ratslam_lv" args="$(find ratslam_ros)/config/config_fb2.txt" cwd="node" required="true">
+		<remap from="/camera/image" to="/usb_cam/image_raw" />
+	</node>
+	<node name="RatSLAMExperienceMap" pkg="ratslam_ros" type="ratslam_em" args="$(find ratslam_ros)/config/config_fb2.txt" cwd="node" required="true" output="screen">
+		<!--remap from="/odom" to="/odom_matched" /-->
+	</node>
+
+	<node pkg="rqt_plot" type="rqt_plot" name="plot_vt_em" args="/fb/Template/current_id,/fb/PoseCell/TopologicalAction/dest_id" />
+
+	<node pkg="image_view" type="image_view" name="overhead" args="image:=/overhead/camera/image" />
+	
+	<node name="RatSLAMPoseCells" pkg="ratslam_ros" type="ratslam_pc" args="$(find ratslam_ros)/config/config_fb2.txt" cwd="node" required="true">
+		<!--remap from="/odom" to="/odom_matched" /-->
+	</node>
+</launch>
